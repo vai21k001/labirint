@@ -1,5 +1,5 @@
-#include <WiFi.h>
-#include <HTTPClient.h>
+// #include <WiFi.h>
+// #include <HTTPClient.h>
 #include <RTClib.h>
 #include <UnixTime.h>
 
@@ -7,8 +7,8 @@ UnixTime stamp(3);  // указать GMT (3 для Москвы)
 RTC_DS3231 rtc;
 
 char daysOfWeek[7][12] = {"Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"};
-const char* ssid = "TP-LINK_E19E";
-const char* password = "54199408";
+char* ssid = "bas";
+char* password = "00009999";
 
 //Your Domain name with URL path or IP address with path
 String serverName = "https://www.timeapi.io/api/Time/current/zone?timeZone=Europe/Moscow";
@@ -21,22 +21,22 @@ void setup() {
   pinMode(23, OUTPUT); 
  
 
-  WiFi.begin(ssid, password);
-  Serial.println("Connecting");
-  while(WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("");
-  Serial.print("Connected to WiFi network with IP Address: ");
-  Serial.println(WiFi.localIP());
+  // WiFi.begin(ssid, password);
+  // Serial.println("Connecting");
+  // while(WiFi.status() != WL_CONNECTED) {
+  //   delay(500);
+  //   Serial.print(".");
+  // }
+  // Serial.println("");
+  // Serial.print("Connected to WiFi network with IP Address: ");
+  // Serial.println(WiFi.localIP());
 
    if (! rtc.begin()) {
     Serial.println("RTC module is NOT found");
     Serial.flush();
     while (1);
   }
-  setClock(httpRq());
+  // setClock(httpRq());
   digitalWrite(23, HIGH);
 }
 
@@ -44,7 +44,7 @@ void loop() {
   
 
   DateTime now = rtc.now();
-  Serial.print("ESP32 RTC Date Time: ");
+  Serial.print("NodeMCU RTC Date Time: ");
   Serial.print(now.year(), DEC);
   Serial.print('/');
   Serial.print(now.month(), DEC);
@@ -67,6 +67,7 @@ void loop() {
 
 // cтчимся на сервак
 
+/*
 String httpRq(){
 
   String payload,serverPath;
@@ -98,7 +99,7 @@ String httpRq(){
     }
 
 return(payload);
-} 
+} */
 
  //ставим время по серваку
 
