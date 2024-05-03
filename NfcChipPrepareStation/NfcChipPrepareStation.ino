@@ -9,6 +9,20 @@ MFRC522::MIFARE_Key KeyA = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; //Лишнее
 MFRC522::MIFARE_Key KeyB = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 MFRC522::MIFARE_Key NewKeyA = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 MFRC522::MIFARE_Key NewKeyB = {0x65, 0xB7, 0x2E, 0x22, 0x4D, 0xBC};
+
+int approvedKeyIndex = 0;
+#define amountOfKeys 8
+byte keysArr[amountOfKeys][MFRC522::MF_KEY_SIZE] = {
+  {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF},
+  {0x65, 0xB7, 0x2E, 0x22, 0x4D, 0xBC},
+  {0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5}, // A0 A1 A2 A3 A4 A5
+  {0xb0, 0xb1, 0xb2, 0xb3, 0xb4, 0xb5}, // B0 B1 B2 B3 B4 B5
+  {0x4d, 0x3a, 0x99, 0xc3, 0x51, 0xdd}, // 4D 3A 99 C3 51 DD
+  {0x1a, 0x98, 0x2c, 0x7e, 0x45, 0x9a}, // 1A 98 2C 7E 45 9A
+  {0xd3, 0xf7, 0xd3, 0xf7, 0xd3, 0xf7}, // D3 F7 D3 F7 D3 F7
+  {0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff} // AA BB CC DD EE FF
+};
+
 int accessTypeDataBlock = 0;    //0, 4
 int accessTypeTrailerBlock = 1;  //1, 3 
 
@@ -67,41 +81,85 @@ void loop() {
   
 }
 
+bool chipAuth(byte keyType, byte *key_, byte block){
+  // int iters = 0;
+  MFRC522::StatusCode status;
+  MFRC522::MIFARE_Key key;
+  for (int j=0; j<MFRC522::MF_KEY_SIZE; j++){
+    key.keyByte[j] = key_[j];
+  }
+  Serial.println("Попытка использовать ключ:");
+  // byte buffer[] = {key[0], key[1], key[2], key[3], key[4], key[5]}
+  dump_byte_array(key.keyByte, 6);
+  status = mfrc522.PCD_Authenticate(keyType, block, &key, &(mfrc522.uid));
+
+  if (status != MFRC522::STATUS_OK) {
+    Serial.print(F("PCD_Authenticate() failed: "));
+    Serial.println(mfrc522.GetStatusCodeName(status));
+    return false;
+  }
+
+  Serial.print(F("Success with key:"));
+  dump_byte_array((key).keyByte, MFRC522::MF_KEY_SIZE);
+  return true;
+}
+
+int bruteAuth(byte keyType, byte keys[amountOfKeys][MFRC522::MF_KEY_SIZE], int keysAmount_, byte block){
+  int iters;
+  
+  for (int i=0; i < keysAmount_; i++){
+    
+    if (chipAuth(keyType, keys[i], block)){
+      return i;
+    }
+      // http://arduino.stackexchange.com/a/14316
+    if ( ! mfrc522.PICC_IsNewCardPresent())
+        break;
+    if ( ! mfrc522.PICC_ReadCardSerial())
+        break;
+  }
+  Serial.println("Ключ не найден");
+  return -1;
+}
+
+int fastAuth(byte keyType, byte keys[amountOfKeys][MFRC522::MF_KEY_SIZE], int keysAmount_, byte block, int keyIndex){
+  Serial.println("Использование последнего ключа");
+  if (chipAuth(keyType, keys[keyIndex], block)){
+    return keyIndex;
+  }else{
+    Serial.println("Использование последнего ключа не удалось. Идёт подбор...");
+    return bruteAuth(keyType, keys, keysAmount_, block);
+  }
+}
+
 bool prepareMifare1k(){
   int trailerBlock = 3;
   MFRC522::StatusCode status;
   int iter;
   byte trailerBuffer[] = {
-    NewKeyA.keyByte[0], NewKeyA.keyByte[1], NewKeyA.keyByte[2], NewKeyA.keyByte[3], NewKeyA.keyByte[4], NewKeyA.keyByte[5],       // Keep default key A
+    NewKeyA.keyByte[0], NewKeyA.keyByte[1], NewKeyA.keyByte[2], NewKeyA.keyByte[3], NewKeyA.keyByte[4], NewKeyA.keyByte[5],
     0, 0, 0,
     0,
-    NewKeyB.keyByte[0], NewKeyB.keyByte[1], NewKeyB.keyByte[2], NewKeyB.keyByte[3], NewKeyB.keyByte[4], NewKeyB.keyByte[5]};      // Keep default key B
+    NewKeyB.keyByte[0], NewKeyB.keyByte[1], NewKeyB.keyByte[2], NewKeyB.keyByte[3], NewKeyB.keyByte[4], NewKeyB.keyByte[5]};
   
   //Auth and prepare Sector 0
-  iter = 0;
-  do {
-    iter += 1;
-    status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_B, trailerBlock, &KeyB, &(mfrc522.uid));
-    if (status != MFRC522::STATUS_OK && status != MFRC522::STATUS_TIMEOUT) {
-      Serial.print(F("PCD_Authenticate() failed: "));
-      Serial.println(mfrc522.GetStatusCodeName(status));
-      // return false;
-    }else if(status == MFRC522::STATUS_TIMEOUT ){
-      Serial.print(F("PCD_Authenticate() failed: "));
-      Serial.println(mfrc522.GetStatusCodeName(status));
-      iter = 11;
-    }
-  }while(iter < 10 && status != MFRC522::STATUS_OK);
-  if (status == MFRC522::STATUS_OK){
-    Serial.println("Writting sector 0");
-    // formatValueBlock(2); //format first station
-    addrBlockPrepare(); //set to clear parameters of card status
 
-    //set access conditions
-    mfrc522.MIFARE_SetAccessBits(&trailerBuffer[6], 0, 0, accessTypeDataBlock, accessTypeTrailerBlock); //set custom acces for block 1
-    writeTrailerSector(trailerBuffer, trailerBlock);
-    //Номер чипа должен быть уже записан
+  int keyNum = fastAuth(MFRC522::PICC_CMD_MF_AUTH_KEY_B, keysArr, amountOfKeys, trailerBlock, approvedKeyIndex);
+  if (keyNum == -1){
+    Serial.println("ошибка ключа перед записью кп");
+    return false;
   }
+  approvedKeyIndex = keyNum;
+
+  Serial.println("Writting sector 0");
+  // formatValueBlock(2); //format first station
+  addrBlockPrepare(); //set to clear parameters of card status
+
+  //set access conditions
+  mfrc522.MIFARE_SetAccessBits(&trailerBuffer[6], 0, 0, accessTypeDataBlock, accessTypeTrailerBlock); //set custom acces for block 1
+  writeTrailerSector(trailerBuffer, trailerBlock);
+  //Номер чипа должен быть уже записан
+
 
   //prepare trailerBuffer for writing
   mfrc522.MIFARE_SetAccessBits(&trailerBuffer[6], accessTypeDataBlock, accessTypeDataBlock, accessTypeDataBlock, accessTypeTrailerBlock);
@@ -110,27 +168,16 @@ bool prepareMifare1k(){
     Serial.print("Writting sector ");
     Serial.println(sector);
     //auth read
-    iter = 0;
-    do {
-      iter += 1;
-      status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_B, trailerBlock, &KeyB, &(mfrc522.uid));
-      if (status != MFRC522::STATUS_OK && status != MFRC522::STATUS_TIMEOUT) {
-        Serial.print(F("PCD_Authenticate() failed: "));
-        Serial.println(mfrc522.GetStatusCodeName(status));
-        // return false;
-      }else if(status == MFRC522::STATUS_TIMEOUT){
-        Serial.print(F("PCD_Authenticate() failed: "));
-        Serial.println(mfrc522.GetStatusCodeName(status));
-        iter = 11;
-      }
-    } while (iter < 10 && status != MFRC522::STATUS_OK);
-    if (status == MFRC522::STATUS_OK){
-      //format 0-2 blocks in the sector
-      for (int block=0; block < 3; block++){
-        formatValueBlock(sector * 4 + block);
-      }
-      writeTrailerSector(trailerBuffer, trailerBlock);//set access conditions
+    keyNum = fastAuth(MFRC522::PICC_CMD_MF_AUTH_KEY_B, keysArr, amountOfKeys, trailerBlock, approvedKeyIndex);
+    if (keyNum == -1){
+      Serial.println("ошибка ключа перед записью кп");
+      return false;
     }
+    
+    for (int block=0; block < 3; block++){
+      formatValueBlock(sector * 4 + block);
+    }
+    writeTrailerSector(trailerBuffer, trailerBlock);//set access conditions
   }
   return true;
 }
