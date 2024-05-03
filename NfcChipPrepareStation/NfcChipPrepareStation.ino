@@ -5,11 +5,11 @@
 #define SS_PIN          D8
 MFRC522 mfrc522(SS_PIN, RST_PIN);  // Create MFRC522 instance
 
-MFRC522::MIFARE_Key KeyA = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+MFRC522::MIFARE_Key KeyA = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; //Лишнее
 MFRC522::MIFARE_Key KeyB = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 MFRC522::MIFARE_Key NewKeyA = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-MFRC522::MIFARE_Key NewKeyB = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-int accessTypeDataBlock = 4;    //0, 4
+MFRC522::MIFARE_Key NewKeyB = {0x65, 0xB7, 0x2E, 0x22, 0x4D, 0xBC};
+int accessTypeDataBlock = 0;    //0, 4
 int accessTypeTrailerBlock = 1;  //1, 3 
 
 void setup() {
@@ -25,11 +25,12 @@ void setup() {
   mfrc522.PCD_DumpVersionToSerial();	// Show details of PCD - MFRC522 Card Reader details
   Serial.println("\nScript for PREPARE STATION ONLY!");
   Serial.println("Keys for write (A and B):");
-  dump_byte_array(KeyA.keyByte, MFRC522::MF_KEY_SIZE);
-  dump_byte_array(KeyB.keyByte, MFRC522::MF_KEY_SIZE);
+  dump_byte_array(NewKeyA.keyByte, MFRC522::MF_KEY_SIZE);
+  dump_byte_array(NewKeyB.keyByte, MFRC522::MF_KEY_SIZE);
 }
 
 void loop() {
+  delay(50); // Упрощённо энергосбережение
   // Reset the loop if no new card present on the sensor/reader. This saves the entire process when idle.
   if ( ! mfrc522.PICC_IsNewCardPresent()){
     //Сигнализировать о том, что карта уже была считана
@@ -63,11 +64,13 @@ void loop() {
 
   mfrc522.PICC_HaltA();
   mfrc522.PCD_StopCrypto1();
+  
 }
 
 bool prepareMifare1k(){
   int trailerBlock = 3;
   MFRC522::StatusCode status;
+  int iter;
   byte trailerBuffer[] = {
     NewKeyA.keyByte[0], NewKeyA.keyByte[1], NewKeyA.keyByte[2], NewKeyA.keyByte[3], NewKeyA.keyByte[4], NewKeyA.keyByte[5],       // Keep default key A
     0, 0, 0,
@@ -75,17 +78,30 @@ bool prepareMifare1k(){
     NewKeyB.keyByte[0], NewKeyB.keyByte[1], NewKeyB.keyByte[2], NewKeyB.keyByte[3], NewKeyB.keyByte[4], NewKeyB.keyByte[5]};      // Keep default key B
   
   //Auth and prepare Sector 0
-  status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_B, trailerBlock, &KeyB, &(mfrc522.uid));
-  if (status != MFRC522::STATUS_OK) {
-    Serial.print(F("PCD_Authenticate() failed: "));
-    Serial.println(mfrc522.GetStatusCodeName(status));
-    return false;
+  iter = 0;
+  do {
+    iter += 1;
+    status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_B, trailerBlock, &KeyB, &(mfrc522.uid));
+    if (status != MFRC522::STATUS_OK && status != MFRC522::STATUS_TIMEOUT) {
+      Serial.print(F("PCD_Authenticate() failed: "));
+      Serial.println(mfrc522.GetStatusCodeName(status));
+      // return false;
+    }else if(status == MFRC522::STATUS_TIMEOUT ){
+      Serial.print(F("PCD_Authenticate() failed: "));
+      Serial.println(mfrc522.GetStatusCodeName(status));
+      iter = 11;
+    }
+  }while(iter < 10 && status != MFRC522::STATUS_OK);
+  if (status == MFRC522::STATUS_OK){
+    Serial.println("Writting sector 0");
+    // formatValueBlock(2); //format first station
+    addrBlockPrepare(); //set to clear parameters of card status
+
+    //set access conditions
+    mfrc522.MIFARE_SetAccessBits(&trailerBuffer[6], 0, 0, accessTypeDataBlock, accessTypeTrailerBlock); //set custom acces for block 1
+    writeTrailerSector(trailerBuffer, trailerBlock);
+    //Номер чипа должен быть уже записан
   }
-  //set access conditions
-  mfrc522.MIFARE_SetAccessBits(&trailerBuffer[6], 1, 1, accessTypeDataBlock, accessTypeTrailerBlock); //set custom acces for block 1
-  writeTrailerSector(trailerBuffer, trailerBlock);
-  //Номер чипа должен быть уже записан
-  formatValueBlock(2); //format first station
 
   //prepare trailerBuffer for writing
   mfrc522.MIFARE_SetAccessBits(&trailerBuffer[6], accessTypeDataBlock, accessTypeDataBlock, accessTypeDataBlock, accessTypeTrailerBlock);
@@ -94,16 +110,26 @@ bool prepareMifare1k(){
     Serial.print("Writting sector ");
     Serial.println(sector);
     //auth read
-    status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_B, trailerBlock, &KeyB, &(mfrc522.uid));
-    if (status != MFRC522::STATUS_OK) {
-      Serial.print(F("PCD_Authenticate() failed: "));
-      Serial.println(mfrc522.GetStatusCodeName(status));
-      return false;
-    }
-    writeTrailerSector(trailerBuffer, trailerBlock);//set access conditions
-    //format 0-2 blocks in the sector
-    for (int block=0; block < 3; block++){
-      formatValueBlock(sector * 4 + block);
+    iter = 0;
+    do {
+      iter += 1;
+      status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_B, trailerBlock, &KeyB, &(mfrc522.uid));
+      if (status != MFRC522::STATUS_OK && status != MFRC522::STATUS_TIMEOUT) {
+        Serial.print(F("PCD_Authenticate() failed: "));
+        Serial.println(mfrc522.GetStatusCodeName(status));
+        // return false;
+      }else if(status == MFRC522::STATUS_TIMEOUT){
+        Serial.print(F("PCD_Authenticate() failed: "));
+        Serial.println(mfrc522.GetStatusCodeName(status));
+        iter = 11;
+      }
+    } while (iter < 10 && status != MFRC522::STATUS_OK);
+    if (status == MFRC522::STATUS_OK){
+      //format 0-2 blocks in the sector
+      for (int block=0; block < 3; block++){
+        formatValueBlock(sector * 4 + block);
+      }
+      writeTrailerSector(trailerBuffer, trailerBlock);//set access conditions
     }
   }
   return true;
@@ -117,10 +143,13 @@ void dump_byte_array(byte *buffer, byte bufferSize) {
   }
 }
 
+
+
 void writeTrailerSector(byte *trailerBuffer, byte trailerBlock){
   MFRC522::StatusCode status;
   byte buffer[18];
   byte size = sizeof(buffer);
+  int iter;
 
   // Read the sector trailer as it is currently stored on the PICC
   // Serial.println(F("Reading sector trailer..."));
@@ -151,11 +180,13 @@ void writeTrailerSector(byte *trailerBuffer, byte trailerBlock){
     // They don't match (yet), so write it to the PICC
     Serial.println(F("Writing new sector trailer..."));
     status = mfrc522.MIFARE_Write(trailerBlock, trailerBuffer, 16);
-    if (status != MFRC522::STATUS_OK) {
+    // iter = 0;
+    if (status != MFRC522::STATUS_OK ) {
       Serial.print(F("MIFARE_Write() failed: "));
       Serial.println(mfrc522.GetStatusCodeName(status));
       return;
     }
+    delay(30);
   }
 }
 
@@ -202,5 +233,39 @@ void formatValueBlock(byte blockAddr) {
             Serial.print(F("MIFARE_Write() failed: "));
             Serial.println(mfrc522.GetStatusCodeName(status));
         }
+        delay(30);
     }
+}
+
+void addrBlockPrepare(){
+  Serial.println("Write addr");
+  byte buff[2];
+  intToLittleEndian(2, buff, 1);
+  byte valueBlock[] = {
+    0, buff[0], 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0 };
+  dump_byte_array(valueBlock, 16);
+  MFRC522::StatusCode status;
+  status = mfrc522.MIFARE_Write(2, valueBlock, 16);
+  if (status != MFRC522::STATUS_OK) {
+    Serial.print(F("MIFARE_Write() failed: "));
+    Serial.println(mfrc522.GetStatusCodeName(status));
+  }
+  delay(30);
+}
+
+void intToLittleEndian(uint32_t num, byte *array, int length){ //max 4 bytes
+  for (int i=0; i<length; i++){
+    array[i] = (num >> (8*i)) & 0xFF;
+  }
+}
+
+uint32_t littleEndianToInt(byte* byteArray, int size) {
+    uint32_t number = 0;
+    for (int i = 0; i < size; i++) {
+        number |= (uint32_t)byteArray[i] << (i * 8); // Собираем число из байтов
+    }
+    return number;
 }
