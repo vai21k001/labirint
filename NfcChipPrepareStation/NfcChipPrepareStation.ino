@@ -30,6 +30,7 @@ void setup() {
 }
 
 void loop() {
+  delay(50); // Упрощённо энергосбережение
   // Reset the loop if no new card present on the sensor/reader. This saves the entire process when idle.
   if ( ! mfrc522.PICC_IsNewCardPresent()){
     //Сигнализировать о том, что карта уже была считана
@@ -60,15 +61,10 @@ void loop() {
   }else{
     Serial.println("Prepare complete");
   }
-  // MFRC522::StatusCode status;
-  // status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, 3, &KeyA, &(mfrc522.uid));
-  // if (status != MFRC522::STATUS_OK) {
-  //   Serial.print(F("PCD_Authenticate() failed: "));
-  //   Serial.println(mfrc522.GetStatusCodeName(status));
-  //   // return false;
-  // }
+
   mfrc522.PICC_HaltA();
   mfrc522.PCD_StopCrypto1();
+  
 }
 
 bool prepareMifare1k(){
@@ -98,7 +94,9 @@ bool prepareMifare1k(){
   }while(iter < 10 && status != MFRC522::STATUS_OK);
   if (status == MFRC522::STATUS_OK){
     Serial.println("Writting sector 0");
-    formatValueBlock(2); //format first station
+    // formatValueBlock(2); //format first station
+    addrBlockPrepare(); //set to clear parameters of card status
+
     //set access conditions
     mfrc522.MIFARE_SetAccessBits(&trailerBuffer[6], 0, 0, accessTypeDataBlock, accessTypeTrailerBlock); //set custom acces for block 1
     writeTrailerSector(trailerBuffer, trailerBlock);
@@ -144,6 +142,8 @@ void dump_byte_array(byte *buffer, byte bufferSize) {
     Serial.print(buffer[i], HEX);
   }
 }
+
+
 
 void writeTrailerSector(byte *trailerBuffer, byte trailerBlock){
   MFRC522::StatusCode status;
@@ -235,4 +235,37 @@ void formatValueBlock(byte blockAddr) {
         }
         delay(30);
     }
+}
+
+void addrBlockPrepare(){
+  Serial.println("Write addr");
+  byte buff[2];
+  intToLittleEndian(2, buff, 1);
+  byte valueBlock[] = {
+    0, buff[0], 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0 };
+  dump_byte_array(valueBlock, 16);
+  MFRC522::StatusCode status;
+  status = mfrc522.MIFARE_Write(2, valueBlock, 16);
+  if (status != MFRC522::STATUS_OK) {
+    Serial.print(F("MIFARE_Write() failed: "));
+    Serial.println(mfrc522.GetStatusCodeName(status));
+  }
+  delay(30);
+}
+
+void intToLittleEndian(uint32_t num, byte *array, int length){ //max 4 bytes
+  for (int i=0; i<length; i++){
+    array[i] = (num >> (8*i)) & 0xFF;
+  }
+}
+
+uint32_t littleEndianToInt(byte* byteArray, int size) {
+    uint32_t number = 0;
+    for (int i = 0; i < size; i++) {
+        number |= (uint32_t)byteArray[i] << (i * 8); // Собираем число из байтов
+    }
+    return number;
 }
