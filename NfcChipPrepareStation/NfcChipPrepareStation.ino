@@ -88,9 +88,9 @@ bool chipAuth(byte keyType, byte *key_, byte block){
   for (int j=0; j<MFRC522::MF_KEY_SIZE; j++){
     key.keyByte[j] = key_[j];
   }
-  Serial.println("Попытка использовать ключ:");
+  // Serial.println("Попытка использовать ключ:");
   // byte buffer[] = {key[0], key[1], key[2], key[3], key[4], key[5]}
-  dump_byte_array(key.keyByte, 6);
+  // dump_byte_array(key.keyByte, 6);
   status = mfrc522.PCD_Authenticate(keyType, block, &key, &(mfrc522.uid));
 
   if (status != MFRC522::STATUS_OK) {
@@ -99,8 +99,8 @@ bool chipAuth(byte keyType, byte *key_, byte block){
     return false;
   }
 
-  Serial.print(F("Success with key:"));
-  dump_byte_array((key).keyByte, MFRC522::MF_KEY_SIZE);
+  // Serial.print(F("Success with key:"));
+  // dump_byte_array((key).keyByte, MFRC522::MF_KEY_SIZE);
   return true;
 }
 
@@ -123,11 +123,11 @@ int bruteAuth(byte keyType, byte keys[amountOfKeys][MFRC522::MF_KEY_SIZE], int k
 }
 
 int fastAuth(byte keyType, byte keys[amountOfKeys][MFRC522::MF_KEY_SIZE], int keysAmount_, byte block, int keyIndex){
-  Serial.println("Использование последнего ключа");
+  // Serial.println("Использование последнего ключа");
   if (chipAuth(keyType, keys[keyIndex], block)){
     return keyIndex;
   }else{
-    Serial.println("Использование последнего ключа не удалось. Идёт подбор...");
+    // Serial.println("Использование последнего ключа не удалось. Идёт подбор...");
     return bruteAuth(keyType, keys, keysAmount_, block);
   }
 }
@@ -225,7 +225,7 @@ void writeTrailerSector(byte *trailerBuffer, byte trailerBlock){
       ||  buffer[14] != trailerBuffer[14]
       ||  buffer[15] != trailerBuffer[15]) {
     // They don't match (yet), so write it to the PICC
-    Serial.println(F("Writing new sector trailer..."));
+    // Serial.println(F("Writing new sector trailer..."));
     status = mfrc522.MIFARE_Write(trailerBlock, trailerBuffer, 16);
     // iter = 0;
     if (status != MFRC522::STATUS_OK ) {
@@ -293,7 +293,7 @@ void addrBlockPrepare(){
     0, 0, 0, 0,
     0, 0, 0, 0,
     0, 0, 0, 0 };
-  dump_byte_array(valueBlock, 16);
+  // dump_byte_array(valueBlock, 16);
   MFRC522::StatusCode status;
   status = mfrc522.MIFARE_Write(2, valueBlock, 16);
   if (status != MFRC522::STATUS_OK) {
