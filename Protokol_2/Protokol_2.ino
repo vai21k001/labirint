@@ -47,6 +47,7 @@ void sndtoPC(String msg[]){      //отправка одного пакета
 }
 
 
+
 String readfromPC(){ 
   
   number = " ";  
@@ -57,4 +58,3 @@ String readfromPC(){
 
   return(number);
 }
-

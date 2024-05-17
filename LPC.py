@@ -21,13 +21,14 @@ wb.create_sheet(title = 'Первый лист', index = 0)
 sheet = wb['Первый лист']
 
 while not founded:
-    for n in list_ports.comports():
+    for n in serial.tools.list_ports.comports():
         try:
             sr = serial.Serial(port=n.__str__()[:4], baudrate=9600)
             sr.write(a)
             if sr.read().decode("Ascii") == '2':
                 print('Подключен к ' + n.__str__())
                 founded = True
+                break
         except Exception as err:
             print(f"Unexpected {err=}, {type(err)=}")
             raise
@@ -38,21 +39,25 @@ def readPack():
     global y
     print('Приложите карту для чтения')
     while ex:
-                sr.write(r)
-                if sr.read().decode("Ascii") == 's':
+        sr.write(r)
+        data = sr.read().decode("Ascii")
+        print(data)
+        if data == 's':
 
-                   while True:
-                        if sr.read().decode("Ascii") == 'e':
-                            x = 1
-                            y = y + 1
-                            print('Данные записаны!')
-                            if input('для продолжения введите любой символ ') == 'x':
-                                ex = False
-                            break
-                        else:
-                            cell = sheet.cell(row=x, column=y)
-                            cell.value = sr.readline().decode("Ascii")
-                            x = x + 1
+           while True:
+                data = sr.read().decode("Ascii")
+                print(data, end = "")
+                if data == 'e':
+                    x = 1
+                    y = y + 1
+                    print('Данные записаны!')
+                    if input('для продолжения введите любой символ ') == 'x':
+                        ex = False
+                    break
+                else:
+                    cell = sheet.cell(row=x, column=y)
+                    cell.value = sr.readline().decode("Ascii")
+                    x = x + 1
 
 def registr():
     sr.write(s)

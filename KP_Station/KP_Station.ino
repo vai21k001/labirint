@@ -15,7 +15,7 @@ NTPClient timeClient(ntpUDP, "ru.pool.ntp.org", 10800, 60000);
 #define SS_PIN          D8
 MFRC522 mfrc522(SS_PIN, RST_PIN);  // Create MFRC522 instance
 
-uint8_t StatonNo = 221; //240 - start, 245 - finish, 248 - check, 249 - clear
+uint8_t StationNo = 100; //240 - start, 245 - finish, 248 - check, 249 - clear
 // MFRC522::MIFARE_Key KeyA = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; //Лишнее
 // MFRC522::MIFARE_Key KeyB = {0x65, 0xB7, 0x2E, 0x22, 0x4D, 0xBC};
 
@@ -136,19 +136,20 @@ bool chipAuth(byte keyType, byte *key_, byte block){
   for (int j=0; j<MFRC522::MF_KEY_SIZE; j++){
     key.keyByte[j] = key_[j];
   }
-  Serial.println("Попытка использовать ключ:");
+  // Serial.println("Попытка использовать ключ:");
   // byte buffer[] = {key[0], key[1], key[2], key[3], key[4], key[5]}
-  dump_byte_array(key.keyByte, 6);
+  // dump_byte_array(key.keyByte, 6);
   status = mfrc522.PCD_Authenticate(keyType, block, &key, &(mfrc522.uid));
 
   if (status != MFRC522::STATUS_OK) {
     Serial.print(F("PCD_Authenticate() failed: "));
+    Serial.print(block);
     Serial.println(mfrc522.GetStatusCodeName(status));
     return false;
   }
 
-  Serial.print(F("Success with key:"));
-  dump_byte_array((key).keyByte, MFRC522::MF_KEY_SIZE);
+  // Serial.print(F("Success with key:"));
+  // dump_byte_array((key).keyByte, MFRC522::MF_KEY_SIZE);
   return true;
 }
 
@@ -171,11 +172,11 @@ int bruteAuth(byte keyType, byte keys[amountOfKeys][MFRC522::MF_KEY_SIZE], int k
 }
 
 int fastAuth(byte keyType, byte keys[amountOfKeys][MFRC522::MF_KEY_SIZE], int keysAmount_, byte block, int keyIndex){
-  Serial.println("Использование последнего ключа");
+  // Serial.println("Использование последнего ключа");
   if (chipAuth(keyType, keys[keyIndex], block)){
     return keyIndex;
   }else{
-    Serial.println("Использование последнего ключа не удалось. Идёт подбор...");
+    // Serial.println("Использование последнего ключа не удалось. Идёт подбор...");
     return bruteAuth(keyType, keys, keysAmount_, block);
   }
 }
@@ -191,7 +192,43 @@ byte getTrailerSectorAddr(byte addr){
   return addr/4*4+3;
 }
 
-void checkIn(){
+uint8_t safe_write(byte block_addr, byte buffer[], byte bufferSize){
+  MFRC522::StatusCode status;
+  byte read_buffer[18];
+  byte size = sizeof(read_buffer);
+  bool FLAG = true;
+  uint8_t iter = 0;
+  // dump_byte_array(buffer, 16);
+  do {
+    FLAG = false;
+    status = mfrc522.MIFARE_Write(block_addr, buffer, bufferSize);
+    if (status != MFRC522::STATUS_OK ) {
+      Serial.print(F("MIFARE_Write() failed: "));
+      Serial.println(mfrc522.GetStatusCodeName(status));
+      continue;
+    }
+
+    status = mfrc522.MIFARE_Read(block_addr, read_buffer, &size);
+    if (status != MFRC522::STATUS_OK) {
+      Serial.print("MIFARE_Read() failed: ");
+      Serial.println(mfrc522.GetStatusCodeName(status));
+      continue;
+    }
+
+    for (uint8_t i = 0; i < 16; i++){
+      if (read_buffer[i] != buffer[i]){
+        FLAG = true;
+        continue;
+      }
+    }
+
+    iter += 1;
+  }while(FLAG && iter < 10);
+  if (iter == 10){return false;}
+  return true;
+}
+
+uint8_t checkIn(){
   Serial.println("Начало отметки на станции");
   MFRC522::StatusCode status;
   byte buffer[18];
@@ -200,31 +237,37 @@ void checkIn(){
   int keyNum = fastAuth(MFRC522::PICC_CMD_MF_AUTH_KEY_B, keysArr, amountOfKeys, 2, approvedKeyIndex);
   if (keyNum == -1){
     Serial.println("ошибка ключа перед записью кп");
-    return;
+    return 0;
   }
   approvedKeyIndex = keyNum;
-  Serial.println("Авторизовано");
+  // Serial.println("Авторизовано");
 
   status = mfrc522.MIFARE_Read(2, buffer, &size);
   if (status != MFRC522::STATUS_OK) {
     Serial.print(F("MIFARE_Read() failed: "));
     Serial.println(mfrc522.GetStatusCodeName(status));
-    return;
+    return 0;
   }
   uint8_t prevStationNo = littleEndianToInt(&buffer[0], 1);
   uint8_t addr = littleEndianToInt(&buffer[1], 1);
-  dump_byte_array(buffer, 16);
-  if (prevStationNo == StatonNo){
+  
+  // dump_byte_array(buffer, 16);
+  if (prevStationNo == StationNo && false){
     //signal уже записано
     Serial.println("Уже записано");
-    return;
+    return 1;
   }
   addr = getNextAddr(addr);
-  
-  intToLittleEndian(StatonNo, &buffer[0], 1);
+  if (addr < 4) {addr = 4;}
+  else if (addr > 62){return 0;}
+  intToLittleEndian(StationNo, &buffer[0], 1);
   intToLittleEndian(addr,     &buffer[1], 1);
-  Serial.println();
-  dump_byte_array(buffer, 16);
+  // Serial.println();
+  // dump_byte_array(buffer, 16);
+  if(!safe_write(2, buffer, 16)){
+    return 0;
+  }
+  /*
   status = mfrc522.MIFARE_Write(2, buffer, 16);
   // iter = 0;
   if (status != MFRC522::STATUS_OK ) {
@@ -232,7 +275,7 @@ void checkIn(){
     Serial.println(mfrc522.GetStatusCodeName(status));
     return;
   }
-
+  */
   // buffer[1] = 0;
   intToLittleEndian(rtc.now().unixtime(), &buffer[1], 4);
   intToLittleEndian(millis()%1000, &buffer[5], 2);
@@ -240,17 +283,22 @@ void checkIn(){
   if (keyNum == -1){
     Serial.println("ошибка ключа при записи кп");
     //signal ошибка ключа
-    return;
+    return 0;
   }
-  status = mfrc522.MIFARE_Write(addr, buffer, 16);
+  if(!safe_write(addr, buffer, 16)){
+    return 0;
+  }
+  /*status = mfrc522.MIFARE_Write(addr, buffer, 16);
   // iter = 0;
   if (status != MFRC522::STATUS_OK ) {
     Serial.print(F("MIFARE_Write() failed: "));
     Serial.println(mfrc522.GetStatusCodeName(status));
     return;
-  }
+  }*/
   //signal success check in
   Serial.println("success check in");
+  StationNo += 1;
+  return 1;
 
 }
 

@@ -40,7 +40,7 @@ void setup() {
   // unsigned long unix_epoch = 1776407602;  // Get epoch time
   // rtc.adjust(DateTime(unix_epoch));  // Set RTC time using NTP epoch time
 
-  updateRTC(&timeClient, &rtc); //Update current time on rtc
+  // updateRTC(&timeClient, &rtc); //Update current time on rtc
 
 
   DateTime now = rtc.now();    // Get initial time from RTC
