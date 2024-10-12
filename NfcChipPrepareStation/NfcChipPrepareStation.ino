@@ -1,9 +1,14 @@
 #include <SPI.h>
 #include <MFRC522.h>
 
-#define RST_PIN         D4
-#define SS_PIN          D8
-MFRC522 mfrc522(SS_PIN, RST_PIN);  // Create MFRC522 instance
+  #define RC_CS_PIN 0
+  #define RC_RST_PIN 3
+  #define SDA_PIN 5
+  #define SCL_PIN 4
+  #define LED_PIN 2
+  #define BUZ_PIN 15 
+MFRC522 mfrc522(RC_CS_PIN, RC_RST_PIN);  // Create MFRC522 instance
+const int ledPin = D0;
 
 MFRC522::MIFARE_Key KeyA = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; //Лишнее
 MFRC522::MIFARE_Key KeyB = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
@@ -11,9 +16,10 @@ MFRC522::MIFARE_Key NewKeyA = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 MFRC522::MIFARE_Key NewKeyB = {0x65, 0xB7, 0x2E, 0x22, 0x4D, 0xBC};
 
 int approvedKeyIndex = 0;
-#define amountOfKeys 8
+#define amountOfKeys 9
 byte keysArr[amountOfKeys][MFRC522::MF_KEY_SIZE] = {
   {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF},
+  {0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
   {0x65, 0xB7, 0x2E, 0x22, 0x4D, 0xBC},
   {0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5}, // A0 A1 A2 A3 A4 A5
   {0xb0, 0xb1, 0xb2, 0xb3, 0xb4, 0xb5}, // B0 B1 B2 B3 B4 B5
@@ -26,12 +32,75 @@ byte keysArr[amountOfKeys][MFRC522::MF_KEY_SIZE] = {
 int accessTypeDataBlock = 0;    //0, 4
 int accessTypeTrailerBlock = 1;  //1, 3 
 
+//0 - ready
+//1 - done
+//2 - error
+void signalyzeReady(){
+  digitalWrite(LED_PIN, HIGH);
+  digitalWrite(BUZ_PIN, HIGH);
+  delay(100);
+  digitalWrite(LED_PIN, LOW);
+  digitalWrite(BUZ_PIN, LOW);
+  delay(50);
+  digitalWrite(LED_PIN, HIGH);
+  digitalWrite(BUZ_PIN, HIGH);
+  delay(150);
+  digitalWrite(LED_PIN, LOW);
+  digitalWrite(BUZ_PIN, LOW);
+  delay(50);
+  digitalWrite(LED_PIN, HIGH);
+  digitalWrite(BUZ_PIN, HIGH);
+  delay(350);
+  digitalWrite(LED_PIN, LOW);
+  digitalWrite(BUZ_PIN, LOW);
+}
+void signalyzeError(){ 
+  digitalWrite(LED_PIN, HIGH);
+  digitalWrite(BUZ_PIN, HIGH);
+  delay(150);
+  digitalWrite(LED_PIN, LOW);
+  digitalWrite(BUZ_PIN, LOW);
+  delay(75);
+  digitalWrite(LED_PIN, HIGH);
+  digitalWrite(BUZ_PIN, HIGH);
+  delay(150);
+  digitalWrite(LED_PIN, LOW);
+  digitalWrite(BUZ_PIN, LOW);
+  delay(75);
+  digitalWrite(LED_PIN, HIGH);
+  digitalWrite(BUZ_PIN, HIGH);
+  delay(350);
+  digitalWrite(LED_PIN, LOW);
+  digitalWrite(BUZ_PIN, LOW); 
+}
+void signalyzeOK(){ 
+  digitalWrite(LED_PIN, HIGH);
+  digitalWrite(BUZ_PIN, HIGH);
+  delay(650);
+  digitalWrite(LED_PIN, LOW);
+  digitalWrite(BUZ_PIN, LOW);
+ }
+
 void setup() {
+  delay(1000);
   Serial.begin(9600);	// Initialize serial communications with the PC
-  while (!Serial);    // Do nothing if no serial port is opened (added for Arduinos based on ATMEGA32U4)
+
+  delay(50);
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);
+  pinMode(BUZ_PIN, OUTPUT);
+  digitalWrite(BUZ_PIN, LOW);
+
   SPI.begin();		    // Init SPI bus
   mfrc522.PCD_Init();	// Init MFRC522 card
-  delay(4);				    // Optional delay. Some board do need more time after init to be ready, see Readme
+  delay(5);
+  mfrc522.PCD_SetAntennaGain(mfrc522.RxGain_23dB_2);
+  delay(5);
+  mfrc522.PCD_AntennaOff(); 
+  delay(5);
+  mfrc522.PCD_AntennaOn();
+  delay(5);				    // Optional delay. Some board do need more time after init to be ready, see Readme
+
 
   // KeyA.keyByte = ;  //Set keys values
   // KeyB.keyByte = ;
@@ -41,6 +110,14 @@ void setup() {
   Serial.println("Keys for write (A and B):");
   dump_byte_array(NewKeyA.keyByte, MFRC522::MF_KEY_SIZE);
   dump_byte_array(NewKeyB.keyByte, MFRC522::MF_KEY_SIZE);
+
+  byte v = mfrc522.PCD_ReadRegister(mfrc522.VersionReg); //read register "VersionReg"
+  if ((v == 0x00) || (v == 0xFF)){ 
+    signalyzeError();
+  } else {
+    signalyzeReady();
+  }
+  
 }
 
 void loop() {
@@ -69,11 +146,15 @@ void loop() {
   }
 
   bool prepareStatus;
+  digitalWrite(ledPin, HIGH);
   prepareStatus = prepareMifare1k();
+  digitalWrite(ledPin, LOW);
   if (!prepareStatus){
     Serial.println("Prepare error");
+    signalyzeError();
   }else{
     Serial.println("Prepare complete");
+    signalyzeOK();
   }
 
   mfrc522.PICC_HaltA();
@@ -144,13 +225,17 @@ bool prepareMifare1k(){
   
   //Auth and prepare Sector 0
 
+  digitalWrite(LED_PIN, HIGH);
+  digitalWrite(BUZ_PIN, HIGH);
+  delay(50);
+  digitalWrite(BUZ_PIN, LOW);
+
   int keyNum = fastAuth(MFRC522::PICC_CMD_MF_AUTH_KEY_B, keysArr, amountOfKeys, trailerBlock, approvedKeyIndex);
   if (keyNum == -1){
     Serial.println("ошибка ключа перед записью кп");
     return false;
   }
   approvedKeyIndex = keyNum;
-
   Serial.println("Writting sector 0");
   // formatValueBlock(2); //format first station
   addrBlockPrepare(); //set to clear parameters of card status
@@ -179,6 +264,7 @@ bool prepareMifare1k(){
     }
     writeTrailerSector(trailerBuffer, trailerBlock);//set access conditions
   }
+  digitalWrite(LED_PIN, LOW);
   return true;
 }
 

@@ -14,8 +14,9 @@ NTPClient timeClient(ntpUDP, "ru.pool.ntp.org", 10800, 60000);
 #define RST_PIN         D4
 #define SS_PIN          D8
 MFRC522 mfrc522(SS_PIN, RST_PIN);  // Create MFRC522 instance
+const int ledPin = D0;
 
-uint8_t StationNo = 100; //240 - start, 245 - finish, 248 - check, 249 - clear
+uint8_t StationNo = 245; //240 - start, 245 - finish, 248 - check, 249 - clear
 // MFRC522::MIFARE_Key KeyA = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; //Лишнее
 // MFRC522::MIFARE_Key KeyB = {0x65, 0xB7, 0x2E, 0x22, 0x4D, 0xBC};
 
@@ -72,13 +73,17 @@ void setup() {
   mfrc522.PCD_Init();	// Init MFRC522 card
   delay(4);				    // Optional delay. Some board do need more time after init to be ready, see Readme
   Serial.println("\nScript for KP STATION ONLY!");
+  pinMode(ledPin, OUTPUT);
+  digitalWrite(ledPin, HIGH);
+  delay(1000);
+  digitalWrite(ledPin, LOW);
 
   // Connect to WiFi
   char ssid[] = "bas"; // Replace with your WiFi SSID
   char password[] = "00009999"; // Replace with your WiFi password
   WiFi.begin(ssid, password);
   int tryes = 0;
-  while (WiFi.status() != WL_CONNECTED || tryes > 20)
+  while (WiFi.status() != WL_CONNECTED && tryes < 30)
   {
     delay(500);
     Serial.print(".");
@@ -252,9 +257,16 @@ uint8_t checkIn(){
   uint8_t addr = littleEndianToInt(&buffer[1], 1);
   
   // dump_byte_array(buffer, 16);
-  if (prevStationNo == StationNo && false){
+  if (prevStationNo == StationNo){
     //signal уже записано
     Serial.println("Уже записано");
+    digitalWrite(ledPin, HIGH);
+    delay(100);
+    digitalWrite(ledPin, LOW);
+    delay(100);
+    digitalWrite(ledPin, HIGH);
+    delay(100);
+    digitalWrite(ledPin, LOW);
     return 1;
   }
   addr = getNextAddr(addr);
@@ -296,8 +308,11 @@ uint8_t checkIn(){
     return;
   }*/
   //signal success check in
+  digitalWrite(ledPin, HIGH);
   Serial.println("success check in");
-  StationNo += 1;
+  delay(50);
+  digitalWrite(ledPin, LOW);
+  // StationNo += 1;
   return 1;
 
 }
