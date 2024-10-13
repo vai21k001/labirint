@@ -38,8 +38,8 @@
 #include <SPI.h>
 #include <MFRC522.h>
 
-#define RST_PIN         D4
-#define SS_PIN          D8         // Configurable, see typical pin layout above
+#define RST_PIN         0
+#define SS_PIN          3         // Configurable, see typical pin layout above
 
 MFRC522 mfrc522(SS_PIN, RST_PIN);  // Create MFRC522 instance
 MFRC522::MIFARE_Key KeyA = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};

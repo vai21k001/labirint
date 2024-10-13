@@ -2,10 +2,10 @@
 #include <SPI.h>
 #include <TimeLib.h>
 
-#define RST_PIN         D4
-#define SS_PIN          D8
+#define RST_PIN         3
+#define SS_PIN          0
 MFRC522 mfrc522(SS_PIN, RST_PIN);  // Create MFRC522 instance
-const int ledPin = D0;
+const int ledPin = 2;
 
 byte action = 1;
 int chipNo = 0;
@@ -40,10 +40,18 @@ uint32_t littleEndianToInt(byte* byteArray, int size) {
 }
 
 void setup() {
+  delay(500);
   Serial.begin(9600);  // Initialize serial communication with a baud rate of 9600
   SPI.begin();		    // Init SPI bus
   mfrc522.PCD_Init();	// Init MFRC522 card
-  delay(4);				    // Optional delay. Some board do need more time after init to be ready, see Readme
+  delay(5);
+  mfrc522.PCD_SetAntennaGain(mfrc522.RxGain_23dB_2);
+  delay(5);
+  mfrc522.PCD_AntennaOff(); 
+  delay(5);
+  mfrc522.PCD_AntennaOn();
+  delay(5);
+  delay(500);				    // Optional delay. Some board do need more time after init to be ready, see Readme
   // Serial.println("\nScript for CONTROL STATION ONLY!");
   pinMode(ledPin, OUTPUT);
   digitalWrite(ledPin, LOW);
@@ -54,16 +62,21 @@ bool NewRead = false;
 void loop() {
   NewRead = false;
   if (Serial.available() > 0){
+    delay(5);
     action = Serial.read();
+    Serial.println(1);
+    delay(5);
+    Serial.println(action);
     NewRead = true;
   }
   switch (action) {
 
-    case '1':
+    case 1:
+      Serial.println(2); 
       digitalWrite(ledPin, HIGH);
       delay(5);
       digitalWrite(ledPin, LOW);
-      Serial.println(2);      
+           
       action = 0;         
       break;
 
