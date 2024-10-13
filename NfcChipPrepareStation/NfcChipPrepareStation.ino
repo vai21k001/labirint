@@ -54,6 +54,26 @@ void signalyzeReady(){
   digitalWrite(LED_PIN, LOW);
   digitalWrite(BUZ_PIN, LOW);
 }
+void signalyzeWifiError(){
+  digitalWrite(LED_PIN, HIGH);
+  digitalWrite(BUZ_PIN, HIGH);
+  delay(400);
+  digitalWrite(LED_PIN, LOW);
+  digitalWrite(BUZ_PIN, LOW);
+  delay(50);
+  digitalWrite(LED_PIN, HIGH);
+  digitalWrite(BUZ_PIN, HIGH);
+  delay(300);
+  digitalWrite(LED_PIN, LOW);
+  digitalWrite(BUZ_PIN, LOW);
+  delay(50);
+  digitalWrite(LED_PIN, HIGH);
+  digitalWrite(BUZ_PIN, HIGH);
+  delay(150);
+  digitalWrite(LED_PIN, LOW);
+  digitalWrite(BUZ_PIN, LOW);
+}
+
 void signalyzeError(){ 
   digitalWrite(LED_PIN, HIGH);
   digitalWrite(BUZ_PIN, HIGH);

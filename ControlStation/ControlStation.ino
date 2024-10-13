@@ -62,16 +62,21 @@ bool NewRead = false;
 void loop() {
   NewRead = false;
   if (Serial.available() > 0){
+    delay(5);
     action = Serial.read();
+    Serial.println(1);
+    delay(5);
+    Serial.println(action);
     NewRead = true;
   }
   switch (action) {
 
-    case '1':
+    case 1:
+      Serial.println(2); 
       digitalWrite(ledPin, HIGH);
       delay(5);
       digitalWrite(ledPin, LOW);
-      Serial.println(2);      
+           
       action = 0;         
       break;
 
