@@ -159,7 +159,7 @@ void rebootRFID(){
 }
 
 void dump_chip(){
-  for (int sector=16; sector>=0; sector--){
+  for (int sector=15; sector>=0; sector--){
     Serial.println(sector);
     for (int block=3; block>=0; block--){
       Serial.print("\t");
@@ -179,23 +179,25 @@ void represent_dump(){
   uint32_t time;
   uint16_t ms;
   uint8_t  trailerBlock;
+  // byte buffer[16];
 
   uint32_t chipNo = littleEndianToInt(&chip[1][0], 4);
   Serial.printf("Номер чипа: %d\r\n", chipNo);
   for (int block=4; block<64; block++){
     trailerBlock = getTrailerSectorAddr(block);
+
     if (block != trailerBlock){
-      kpNo = littleEndianToInt(&chip[block][0], 1);
+      memcpy(&kpNo, &(chip[block][0]), 1);
       if (kpNo == 0){
         return;
       }
-      time = littleEndianToInt(&chip[block][1], 4);
+      memcpy(&time, &chip[block][1], 4);
       if (block == 4){
         startTime = time;
         prevTime = time;
       } 
+      memcpy(&ms, &chip[block][5], 2);
 
-      ms = littleEndianToInt(&chip[block][5], 2);
       char buf[22];
       sprintf(buf, "%3d %2d:%2d:%2d.%3d %2d:%2d", kpNo, hour(time-startTime), minute(time-startTime), second(time-startTime), ms, minute(time-prevTime), second(time-prevTime));
       prevTime = time;
