@@ -14,6 +14,7 @@ MFRC522::Uid prev_uid;
 
 uint32_t timer_start, timer_stop;
 
+
 void setup() {
 	Serial.begin(115200);		// Initialize serial communications with the PC
 	while (!Serial);		// Do nothing if no serial port is opened (added for Arduinos based on ATMEGA32U4)
@@ -50,9 +51,7 @@ void loop(){
     }
   }
 
-
-
-  timer_start = 0;
+  // timer_start = 0;
   while (prev_sector != -1 && memcmp(&prev_uid, &mfrc522.uid, sizeof(prev_uid)) == 0){
     if ( ! mfrc522.PICC_IsNewCardPresent()) 
       continue;
@@ -60,15 +59,7 @@ void loop(){
     // Select one of the cards
     if ( ! mfrc522.PICC_ReadCardSerial())
       continue;
-
-    // if (memcmp(&prev_uid, &mfrc522.uid, sizeof(prev_uid)) != 0){
-    //   Serial.println("Change UID");
-    //   prev_uid = mfrc522.uid;
-    //   Serial.print("UID: ");
-    //   dump_byte_array(&(mfrc522.uid.uidByte[0]), mfrc522.uid.size);
-    //   break;
-    // }
-
+      
     if (timer_start == 0){
       timer_start = millis();
       Serial.println("reset timer");
@@ -76,15 +67,16 @@ void loop(){
     prev_sector = read_chip(prev_sector);
     mfrc522.PICC_HaltA();
     mfrc522.PCD_StopCrypto1();
-
-
   }
-  timer_stop = millis();
-  Serial.print("Time: ");
-  Serial.println(timer_stop - timer_start);
+
+  // timer_stop = millis();
+  // Serial.print("Time: ");
+  // Serial.println(timer_stop - timer_start);
+
   if (prev_sector == -1){
     dump_chip();
     represent_dump();
+    sendToPC();
     delay(500);
   }
 
@@ -97,7 +89,6 @@ void loop(){
   }
 
 }
-
 
 
 int read_chip(int prev_sector){
@@ -170,6 +161,46 @@ void dump_chip(){
     }
     // delay(10);
   }
+}
+
+//Добавить отправку номера чипа
+void sendToPC(){
+  uint8_t count;
+  uint8_t last_block;
+  byte trailerBlock;
+  memcpy(&last_block, &chip[2][1], 1);
+  byte data[350];
+  Serial.println(last_block);
+  count = (last_block - 4)/4*3 + last_block % 4 + 1;
+
+  uint16_t len = 0;
+  uint16_t pos = 2;
+  
+  Serial.println(count);
+  for (int i=4; i<=last_block; i++){
+    trailerBlock = getTrailerSectorAddr(i);
+    if (i != trailerBlock){
+      if (chip[i][0] == 0x00){
+        break;
+      }
+      memcpy(data + pos, &(chip[i][0]), 7);
+      dump_byte_array(data+pos, 7);
+      Serial.println();
+      pos += 7;
+      len += 1;
+    }
+  }
+  Serial.print("Len: ");
+  int packLen = pos - 2;
+  Serial.println(packLen);
+  memcpy(data, &packLen, 2);
+
+  const char startMarker[] = "start";   // 5 байт: 's','t','a','r','t'
+  const char endMarker[] = "end";
+
+  Serial.write((const uint8_t*)startMarker, sizeof(startMarker) - 1);
+  Serial.write(data, pos);
+  Serial.write((const uint8_t*)endMarker, sizeof(endMarker) - 1);
 }
 
 void represent_dump(){
