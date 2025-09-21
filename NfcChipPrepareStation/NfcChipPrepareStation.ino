@@ -15,6 +15,8 @@ MFRC522::MIFARE_Key KeyB = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 MFRC522::MIFARE_Key NewKeyA = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 MFRC522::MIFARE_Key NewKeyB = {0x65, 0xB7, 0x2E, 0x22, 0x4D, 0xBC};
 
+int last_key_type = 0;
+byte key_types[2] = {MFRC522::PICC_CMD_MF_AUTH_KEY_B, MFRC522::PICC_CMD_MF_AUTH_KEY_A};
 int approvedKeyIndex = 0;
 #define amountOfKeys 9
 byte keysArr[amountOfKeys][MFRC522::MF_KEY_SIZE] = {
@@ -210,6 +212,8 @@ int bruteAuth(byte keyType, byte keys[amountOfKeys][MFRC522::MF_KEY_SIZE], int k
   
   for (int i=0; i < keysAmount_; i++){
     
+    Serial.println("Попытка использовать ключ:");
+    dump_byte_array(keys[i], 6);
     if (chipAuth(keyType, keys[i], block)){
       return i;
     }
@@ -223,14 +227,22 @@ int bruteAuth(byte keyType, byte keys[amountOfKeys][MFRC522::MF_KEY_SIZE], int k
   return -1;
 }
 
-int fastAuth(byte keyType, byte keys[amountOfKeys][MFRC522::MF_KEY_SIZE], int keysAmount_, byte block, int keyIndex){
+int fastAuth(byte keys[amountOfKeys][MFRC522::MF_KEY_SIZE], int keysAmount_, byte block, int keyIndex){
   // Serial.println("Использование последнего ключа");
-  if (chipAuth(keyType, keys[keyIndex], block)){
+  int auth;
+  if (chipAuth(key_types[last_key_type], keys[keyIndex], block)){
     return keyIndex;
   }else{
-    // Serial.println("Использование последнего ключа не удалось. Идёт подбор...");
-    return bruteAuth(keyType, keys, keysAmount_, block);
+    Serial.println("Использование последнего ключа не удалось. Идёт подбор...");
+    for (int i=0; i<2; i++){
+      auth = bruteAuth(key_types[i], keys, keysAmount_, block);
+      if (auth != -1){
+        last_key_type = i;
+        return auth;
+      }
+    }
   }
+  return auth;
 }
 
 bool prepareMifare1k(){
@@ -250,7 +262,7 @@ bool prepareMifare1k(){
   delay(50);
   digitalWrite(BUZ_PIN, LOW);
 
-  int keyNum = fastAuth(MFRC522::PICC_CMD_MF_AUTH_KEY_B, keysArr, amountOfKeys, trailerBlock, approvedKeyIndex);
+  int keyNum = fastAuth(keysArr, amountOfKeys, trailerBlock, approvedKeyIndex);
   if (keyNum == -1){
     Serial.println("ошибка ключа перед записью кп");
     return false;
@@ -273,7 +285,7 @@ bool prepareMifare1k(){
     Serial.print("Writting sector ");
     Serial.println(sector);
     //auth read
-    keyNum = fastAuth(MFRC522::PICC_CMD_MF_AUTH_KEY_B, keysArr, amountOfKeys, trailerBlock, approvedKeyIndex);
+    keyNum = fastAuth(keysArr, amountOfKeys, trailerBlock, approvedKeyIndex);
     if (keyNum == -1){
       Serial.println("ошибка ключа перед записью кп");
       return false;
