@@ -142,6 +142,7 @@ void rebootRFID(){
   digitalWrite(RST_PIN, LOW);           // Отпускаем сброс
   mfrc522.PCD_Init();                      // Инициализируем заного
   delay(5);
+  mfrc522.PCD_SetAntennaGain(mfrc522.RxGain_23dB_2);
   mfrc522.PCD_AntennaOff(); 
   delay(5);
   mfrc522.PCD_AntennaOn();
