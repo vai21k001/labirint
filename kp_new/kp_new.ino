@@ -8,12 +8,12 @@
 #include <WiFiUdp.h>
 #include <NTPClient.h>
 
-#define DEBUG
+// #define DEBUG
 #define DS3231_ADDRESS 0x68
 #define SECONDS_PER_DAY 86400L
 
 //240 - start, 245 - finish, 248 - check, 249 - clear
-#define STATION_NUMBER 37
+#define STATION_NUMBER 34
 #define REBOOT_TIME 5000
 
 typedef struct {
@@ -203,20 +203,9 @@ uint8_t checkIn(){
     digitalWrite(LED_PIN, LOW);
     return 1;
   }
+
   addr = getNextAddr(addr);
-  if (addr < 4) {addr = 4;}
-  else if (addr > 62){return 0;}
   memcpy(&buffer[0], &StationNo, 1);
-  memcpy(&buffer[1], &addr,      1);
-  // intToLittleEndian(StationNo, &buffer[0], 1);
-  // intToLittleEndian(addr,     &buffer[1], 1);
-  // Serial.println();
-  // dump_byte_array(buffer, 16);
-  //Запись номера станции и блока, куда будет она произведена
-  if(!safe_write(2, buffer, 16)){
-    return -1;
-  }
-  
   ds3231_getDateTime(&datetime);
   intToLittleEndian(dateTimeToUnix(&datetime), &buffer[1], 4);
   intToLittleEndian(millis()%1000, &buffer[5], 2);
@@ -229,13 +218,23 @@ uint8_t checkIn(){
   if(!safe_write(addr, buffer, 16)){
     return -1;
   }
-  /*status = mfrc522.MIFARE_Write(addr, buffer, 16);
-  // iter = 0;
-  if (status != MFRC522::STATUS_OK ) {
-    Serial.print(F("MIFARE_Write() failed: "));
-    Serial.println(mfrc522.GetStatusCodeName(status));
-    return;
-  }*/
+
+  //Запись в блок 2 факта отметки на текущей кп
+  keyNum = fastAuth(MFRC522::PICC_CMD_MF_AUTH_KEY_B, keysArr, amountOfKeys, 2, approvedKeyIndex);
+  if (keyNum == -1){
+    Serial.println("ошибка ключа перед записью кп");
+    return -1;
+  }
+  approvedKeyIndex = keyNum;
+  memset(buffer, 0, 18);
+  if (addr < 4) {addr = 4;}
+  else if (addr > 62){return 0;}
+  memcpy(&buffer[0], &StationNo, 1);
+  memcpy(&buffer[1], &addr,      1);
+  if(!safe_write(2, buffer, 16)){
+    return -1;
+  }
+  
   //signal success check in
   Serial.println("success check in");
   StationNo += STATION_NO_INCREMENT;
