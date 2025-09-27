@@ -8,6 +8,7 @@
 #include <WiFiUdp.h>
 #include <NTPClient.h>
 
+#define DEBUG
 #define DS3231_ADDRESS 0x68
 #define SECONDS_PER_DAY 86400L
 
@@ -55,14 +56,12 @@ byte keysArr[amountOfKeys][MFRC522::MF_KEY_SIZE] = {
   {0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff} // AA BB CC DD EE FF
 };
 
-
-
 void setup() {
  	Serial.begin(115200);		// Initialize serial communications with the PC
+  ds3231_begin(SDA_PIN, SCL_PIN);
 	delay(5);
-  // while (!Serial);		// Do nothing if no serial port is opened (added for Arduinos based on ATMEGA32U4)
-	SPI.begin();			// Init SPI bus
-	mfrc522.PCD_Init();		// Init MFRC522
+  SPI.begin();		    // Init SPI bus
+  mfrc522.PCD_Init();	// Init MFRC522 card
   delay(5);
   mfrc522.PCD_SetAntennaGain(mfrc522.RxGain_33dB); // было так в кп
   // mfrc522.PCD_SetAntennaGain(mfrc522.RxGain_23dB_2);
@@ -120,7 +119,7 @@ uint32_t  tryTime = millis();
 void loop() {
   if (millis() - rebootTimer >= REBOOT_TIME)
     rebootRFID();
-  delay(50); // Упрощённо энергосбережение
+  delay(20); // Упрощённо энергосбережение
   // Reset the loop if no new card present on the sensor/reader. This saves the entire process when idle.
   if ( ! mfrc522.PICC_IsNewCardPresent()){
     //Сигнализировать о том, что карта уже была считана
@@ -130,6 +129,20 @@ void loop() {
   // Select one of the cards
   if ( ! mfrc522.PICC_ReadCardSerial())
     return;
+
+  #ifdef DEBUG
+  Serial.print(F("Card UID:"));
+  dump_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size);
+  Serial.println();
+  Serial.print(F("PICC type: "));
+  MFRC522::PICC_Type piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
+  Serial.println(mfrc522.PICC_GetTypeName(piccType));
+
+  if (piccType != MFRC522::PICC_TYPE_MIFARE_1K) {
+    Serial.println(F("This code only works with MIFARE 1K cards."));
+    return;
+  }
+  #endif
 
   if (checkIn() == 1){
     signalyzeOK();
@@ -142,7 +155,9 @@ void loop() {
 }
 
 uint8_t checkIn(){
+  #ifdef DEBUG
   Serial.println("Начало отметки на станции");
+  #endif
   MFRC522::StatusCode status;
   byte buffer[18];
   byte size = sizeof(buffer);
@@ -155,6 +170,7 @@ uint8_t checkIn(){
   approvedKeyIndex = keyNum;
   // Serial.println("Авторизовано");
 
+  //Чтение блока 2 с данными о последней записанной станции и блоке
   status = mfrc522.MIFARE_Read(2, buffer, &size);
   if (status != MFRC522::STATUS_OK) {
     Serial.print(F("MIFARE_Read() failed: "));
@@ -168,9 +184,11 @@ uint8_t checkIn(){
   uint8_t addr;
   memcpy(&prevStationNo, &buffer[0], 1);
   memcpy(&addr, &buffer[1], 1);
+  #ifdef DEBUG
   Serial.println("Данные о записях:");
   Serial.println(prevStationNo);
   Serial.println(addr);
+  #endif
   
   // dump_byte_array(buffer, 16);
   if (prevStationNo == StationNo){
@@ -267,9 +285,11 @@ bool chipAuth(byte keyType, byte *key_, byte block){
   for (int j=0; j<MFRC522::MF_KEY_SIZE; j++){
     key.keyByte[j] = key_[j];
   }
+  #ifdef DEBUG
   Serial.println("Попытка использовать ключ:");
   // byte buffer[] = {key[0], key[1], key[2], key[3], key[4], key[5]}
   dump_byte_array(key.keyByte, 6);
+  #endif
   status = mfrc522.PCD_Authenticate(keyType, block, &key, &(mfrc522.uid));
 
   if (status != MFRC522::STATUS_OK) {
@@ -303,7 +323,9 @@ int bruteAuth(byte keyType, byte keys[amountOfKeys][MFRC522::MF_KEY_SIZE], int k
 }
 
 int fastAuth(byte keyType, byte keys[amountOfKeys][MFRC522::MF_KEY_SIZE], int keysAmount_, byte block, int keyIndex){
+  #ifdef DEBUG
   Serial.println("Использование последнего ключа");
+  #endif
   if (chipAuth(keyType, keys[keyIndex], block)){
     return keyIndex;
   }else{
@@ -313,11 +335,14 @@ int fastAuth(byte keyType, byte keys[amountOfKeys][MFRC522::MF_KEY_SIZE], int ke
 }
 
 void rebootRFID(){
+  #ifdef DEBUG
   Serial.println("reboot");
+  #endif
   rebootTimer = millis();               // Обновляем таймер
   digitalWrite(RC_RST_PIN, HIGH);          // Сбрасываем модуль
   delayMicroseconds(2);                 // Ждем 2 мкс
   digitalWrite(RC_RST_PIN, LOW);           // Отпускаем сброс
+  delay(5);
   mfrc522.PCD_Init();                      // Инициализируем заного
   delay(5);
   mfrc522.PCD_SetAntennaGain(mfrc522.RxGain_33dB);
